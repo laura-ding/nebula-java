@@ -1,3 +1,9 @@
+/* Copyright (c) 2020 vesoft inc. All rights reserved.
+ *
+ * This source code is licensed under Apache 2.0 License,
+ * attached with Common Clause Condition 1.0, found in the LICENSES directory.
+ */
+
 package com.vesoft.nebula.client.graph.net;
 
 import com.vesoft.nebula.client.graph.data.HostAddress;
@@ -62,7 +68,7 @@ public class RoundRobinLoadBalancer implements LoadBalancer {
 
     public boolean ping(HostAddress addr) {
         try {
-            Connection connection = new SyncConnection();
+            Connection connection = new Connection();
             connection.open(addr, this.timeout);
             connection.close();
             return true;

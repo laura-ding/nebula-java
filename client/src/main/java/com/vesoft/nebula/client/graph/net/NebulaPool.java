@@ -22,7 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NebulaPool {
-    private GenericObjectPool<SyncConnection> objectPool = null;
+    private GenericObjectPool<Connection> objectPool = null;
     private LoadBalancer loadBalancer;
     private final Logger log = LoggerFactory.getLogger(this.getClass());
     // the wait time to get idle connection, unit ms
@@ -57,7 +57,7 @@ public class NebulaPool {
         try {
             // If no idle connection, try once
             int retry = getIdleConnNum() == 0 ? 1 : getIdleConnNum();
-            SyncConnection connection = null;
+            Connection connection = null;
             while (retry-- > 0) {
                 connection = objectPool.borrowObject(waitTime);
                 if (connection == null || !connection.ping()) {

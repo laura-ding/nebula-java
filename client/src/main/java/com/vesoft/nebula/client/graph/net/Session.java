@@ -8,22 +8,22 @@ package com.vesoft.nebula.client.graph.net;
 
 import com.vesoft.nebula.client.graph.data.ResultSet;
 import com.vesoft.nebula.client.graph.exception.IOErrorException;
-import com.vesoft.nebula.graph.ExecutionResponse;
-import java.io.UnsupportedEncodingException;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Session {
     private final long sessionID;
-    private SyncConnection connection;
-    private final GenericObjectPool<SyncConnection> pool;
+    private Connection connection;
+    private final GenericObjectPool<Connection> pool;
     private final Boolean retryConnect;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public Session(SyncConnection connection,
+    public Session(Connection connection,
                    long sessionID,
-                   GenericObjectPool<SyncConnection> connPool,
+                   GenericObjectPool<Connection> connPool,
                    Boolean retryConnect) {
         this.connection = connection;
         this.sessionID = sessionID;
@@ -37,32 +37,66 @@ public class Session {
      * @param stmt The query sentence.
      * @return The ResultSet.
      */
-    public ResultSet execute(String stmt) throws IOErrorException, UnsupportedEncodingException {
-        try {
-            if (connection == null) {
-                throw new IOErrorException(IOErrorException.E_CONNECT_BROKEN,
-                        "Connection is null");
+    public ResultSet execute(String stmt)
+        throws IOErrorException, ExecutionException, InterruptedException {
+        if (connection == null) {
+            throw new IOErrorException(IOErrorException.E_CONNECT_BROKEN,
+                    "Connection is null");
+        }
+        RpcResponse<ResultSet> resp = connection.async_execute(sessionID, stmt).get();
+        if (!resp.hasError()) {
+            return resp.getResult();
+        }
+
+        IOErrorException e = resp.getException();
+        System.out.println("Exception is " + Exception.class);
+        if (e.getType() == IOErrorException.E_CONNECT_BROKEN)  {
+            if (pool.getFactory() instanceof ConnObjectPool) {
+                ((ConnObjectPool) pool.getFactory()).updateServerStatus();
             }
-            ExecutionResponse resp = connection.execute(sessionID, stmt);
-            return new ResultSet(resp);
-        } catch (IOErrorException ie) {
-            if (ie.getType() == IOErrorException.E_CONNECT_BROKEN) {
+
+            if (retryConnect) {
+                if (!retryConnect()) {
+                    throw new IOErrorException(IOErrorException.E_ALL_BROKEN,
+                        "All servers are broken.");
+                }
+                resp = connection.async_execute(sessionID, stmt).get();
+                if (!resp.hasError()) {
+                    return resp.getResult();
+                }
+            }
+        }
+        throw e;
+    }
+
+    public void async_execute(String stmt, Consumer<RpcResponse<ResultSet>> callback) {
+        connection.async_execute(sessionID, stmt, (RpcResponse<ResultSet> resp) -> {
+            if (!resp.hasError()) {
+                callback.accept(resp);
+                return;
+            }
+            IOErrorException e = resp.getException();
+            if (((IOErrorException)e).getType() == IOErrorException.E_CONNECT_BROKEN)  {
                 if (pool.getFactory() instanceof ConnObjectPool) {
                     ((ConnObjectPool) pool.getFactory()).updateServerStatus();
                 }
 
                 if (retryConnect) {
-                    if (retryConnect()) {
-                        ExecutionResponse resp = connection.execute(sessionID, stmt);
-                        return new ResultSet(resp);
-                    } else {
-                        throw new IOErrorException(IOErrorException.E_ALL_BROKEN,
-                                "All servers are broken.");
+                    if (!retryConnect()) {
+                        callback.accept(new RpcResponse(
+                            new IOErrorException(IOErrorException.E_ALL_BROKEN,
+                            "All servers are broken.")));
+                        return;
                     }
+                    connection.async_execute(sessionID, stmt, callback);
                 }
             }
-            throw ie;
-        }
+        });
+    }
+
+    // TODO: support do reconnect in future.
+    public NFuture<RpcResponse<ResultSet>> async_execute(String stmt) {
+        return connection.async_execute(sessionID, stmt);
     }
 
     private boolean retryConnect() {
@@ -72,7 +106,7 @@ public class Session {
             } catch (Exception e) {
                 log.error("Return object failed");
             }
-            SyncConnection newConn = pool.borrowObject();
+            Connection newConn = pool.borrowObject();
             if (newConn == null) {
                 log.error("Get connection object failed.");
             }
@@ -83,7 +117,6 @@ public class Session {
         }
     }
 
-    // Need server supported, v1.0 nebula-graph doesn't supported
     public boolean ping() {
         if (connection == null) {
             return false;

@@ -36,6 +36,7 @@ public class TestSession {
             Assert.assertTrue(session.ping());
 
             for (int i = 0; i < 10; i++) {
+                System.out.println("======== i = " + i);
                 if (i == 3) {
                     runtime.exec("docker stop nebula-docker-compose_graphd_1")
                             .waitFor(5, TimeUnit.SECONDS);
@@ -43,13 +44,24 @@ public class TestSession {
                             .waitFor(5, TimeUnit.SECONDS);
                 }
                 try {
+                    // test sync interface with reconnect
                     ResultSet resp = session.execute("SHOW SPACES");
                     if (i >= 3) {
                         Assert.assertEquals(ErrorCode.E_SESSION_INVALID, resp.getErrorCode());
                     } else {
                         Assert.assertEquals(ErrorCode.SUCCEEDED, resp.getErrorCode());
                     }
+                    if (i >= 3) {
+                        // test async interface with reconnect
+                        session.async_execute("SHOW SPACES", (RpcResponse<ResultSet> ret) -> {
+                            assert !ret.hasError();
+                            ResultSet r = ret.getResult();
+                            Assert.assertEquals(ErrorCode.E_SESSION_INVALID, r.getErrorCode());
+                        });
+                        TimeUnit.SECONDS.sleep(2);
+                    }
                 } catch (IOErrorException ie) {
+                    ie.printStackTrace();
                     Assert.fail();
                 }
                 TimeUnit.SECONDS.sleep(2);
