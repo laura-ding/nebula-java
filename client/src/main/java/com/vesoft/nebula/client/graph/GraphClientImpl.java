@@ -9,16 +9,13 @@ package com.vesoft.nebula.client.graph;
 import com.facebook.thrift.TException;
 import com.facebook.thrift.protocol.TCompactProtocol;
 import com.facebook.thrift.transport.TSocket;
-import com.google.common.collect.Lists;
 import com.google.common.net.HostAndPort;
 import com.vesoft.nebula.AbstractClient;
 import com.vesoft.nebula.graph.AuthResponse;
 import com.vesoft.nebula.graph.ErrorCode;
 import com.vesoft.nebula.graph.ExecutionResponse;
 import com.vesoft.nebula.graph.GraphService;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +30,7 @@ public class GraphClientImpl extends AbstractClient implements GraphClient {
     protected String user;
     protected String password;
     private long sessionID;
-    private ThreadLocal<GraphService.Client> client = new ThreadLocal<>();
+    private GraphService.Client client = null;
 
     public GraphClientImpl(List<HostAndPort> addresses, int timeout,
                            int connectionRetry, int executionRetry) {
@@ -62,9 +59,8 @@ public class GraphClientImpl extends AbstractClient implements GraphClient {
                 connectionTimeout);
         transport.open();
         protocol = new TCompactProtocol(transport);
-        GraphService.Client thriftClient = new GraphService.Client(protocol);
-        client.set(thriftClient);
-        AuthResponse result = client.get().authenticate(user, password);
+        client = new GraphService.Client(protocol);
+        AuthResponse result = client.authenticate(user, password);
         if (result.getError_code() == ErrorCode.E_BAD_USERNAME_PASSWORD) {
             LOGGER.error("User name or password error");
             return ErrorCode.E_BAD_USERNAME_PASSWORD;
@@ -105,7 +101,7 @@ public class GraphClientImpl extends AbstractClient implements GraphClient {
         int code = ErrorCode.E_RPC_FAILURE;
         while (retry-- >= 0) {
             try {
-                ExecutionResponse executionResponse = client.get().execute(sessionID, statement);
+                ExecutionResponse executionResponse = client.execute(sessionID, statement);
                 code = executionResponse.getError_code();
                 if (code == ErrorCode.SUCCEEDED) {
                     break;
@@ -131,14 +127,14 @@ public class GraphClientImpl extends AbstractClient implements GraphClient {
             throw new ConnectionException("Thrift rpc call failed");
         }
 
-        ExecutionResponse executionResponse = client.get().execute(sessionID, statement);
+        ExecutionResponse executionResponse = client.execute(sessionID, statement);
         int code = executionResponse.getError_code();
         if (code == ErrorCode.SUCCEEDED) {
             return new ResultSet(executionResponse);
         } else {
             String errorMsg = executionResponse.getError_msg();
             String warnMsg = executionResponse.getWarning_msg();
-            if (errorMsg != null || !errorMsg.isEmpty()) {
+            if (errorMsg != null && !errorMsg.isEmpty()) {
                 LOGGER.error("Execute error: " + errorMsg);
             }
             if (warnMsg != null && !warnMsg.isEmpty()) {
@@ -154,7 +150,9 @@ public class GraphClientImpl extends AbstractClient implements GraphClient {
      */
     public void close() {
         try {
-            client.get().signout(sessionID);
+            if (client != null) {
+                client.signout(sessionID);
+            }
         } catch (TException e) {
             LOGGER.error("Disconnect error: " + e.getMessage());
         } finally {
