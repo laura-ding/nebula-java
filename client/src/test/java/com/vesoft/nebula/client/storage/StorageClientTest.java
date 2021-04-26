@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class StorageClientTest {
@@ -47,6 +48,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanVertexWithNoCol() {
         try {
@@ -97,6 +99,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanVertexWithCols() {
         try {
@@ -158,6 +161,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanVertexWithAllCol() {
         try {
@@ -186,6 +190,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanEdgeWithoutCol() {
         try {
@@ -244,6 +249,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanEdgeWithCols() {
         try {
@@ -309,6 +315,7 @@ public class StorageClientTest {
         }
     }
 
+    @Ignore
     @Test
     public void testScanEdgeWithAllCols() {
         try {
