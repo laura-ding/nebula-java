@@ -10,6 +10,7 @@ import com.vesoft.nebula.client.graph.data.ResultSet;
 import com.vesoft.nebula.client.graph.exception.IOErrorException;
 import com.vesoft.nebula.graph.ExecutionResponse;
 import java.io.UnsupportedEncodingException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ public class Session {
     private final GenericObjectPool<SyncConnection> pool;
     private final Boolean retryConnect;
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final AtomicBoolean isRuning = new AtomicBoolean(false);
 
     public Session(SyncConnection connection,
                    long sessionID,
@@ -37,7 +39,14 @@ public class Session {
      * @param stmt The query sentence.
      * @return The ResultSet.
      */
-    public ResultSet execute(String stmt) throws IOErrorException, UnsupportedEncodingException {
+    public ResultSet execute(String stmt) throws IOErrorException {
+        if (isRuning.get()) {
+            throw new IOErrorException(
+                IOErrorException.E_CONNECT_NEED_WAITING,
+                "The previous execution was not completed, current thread is: "
+                    + Thread.currentThread().getName());
+        }
+        isRuning.set(true);
         try {
             if (connection == null) {
                 throw new IOErrorException(IOErrorException.E_CONNECT_BROKEN,
@@ -62,6 +71,8 @@ public class Session {
                 }
             }
             throw ie;
+        } finally {
+            isRuning.set(false);
         }
     }
 

@@ -13,11 +13,43 @@ import com.vesoft.nebula.client.graph.exception.IOErrorException;
 import com.vesoft.nebula.graph.ErrorCode;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestSession {
+    @Test()
+    public void testMultiThreadUseTheSameSession() {
+        NebulaPool pool = new NebulaPool();
+        try {
+            NebulaPoolConfig nebulaPoolConfig = new NebulaPoolConfig();
+            nebulaPoolConfig.setMaxConnSize(1);
+            List<HostAddress> addresses = Arrays.asList(new HostAddress("127.0.0.1", 9670));
+            Assert.assertTrue(pool.init(addresses, nebulaPoolConfig));
+            Session session = pool.getSession("root", "nebula", true);
+            ExecutorService executorService = Executors.newFixedThreadPool(4);
+            for (int i = 0; i < 4; i++) {
+                executorService.submit(() -> {
+                    try {
+                        ResultSet resp = session.execute("SHOW TAGS;");
+                        assert false;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        assert true;
+                    }
+                });
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertFalse(e.getMessage(),false);
+        } finally {
+            pool.close();
+        }
+    }
+
     @Test()
     public void testReconnect() {
         Runtime runtime = Runtime.getRuntime();
