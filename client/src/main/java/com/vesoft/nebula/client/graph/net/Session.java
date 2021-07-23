@@ -9,6 +9,7 @@ package com.vesoft.nebula.client.graph.net;
 import com.vesoft.nebula.client.graph.data.HostAddress;
 import com.vesoft.nebula.client.graph.data.ResultSet;
 import com.vesoft.nebula.client.graph.exception.IOErrorException;
+import com.vesoft.nebula.client.graph.exception.InvalidSessionException;
 import com.vesoft.nebula.graph.ExecutionResponse;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ public class Session {
     private final Boolean retryConnect;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final AtomicBoolean isRelease = new AtomicBoolean(false);
 
     public Session(SyncConnection connection,
                    AuthResult authResult,
@@ -41,6 +43,7 @@ public class Session {
      * @return The ResultSet.
      */
     public ResultSet execute(String stmt) throws IOErrorException {
+        checkRelease();
         if (isRunning.get()) {
             throw new IOErrorException(
                 IOErrorException.E_MULTI_THREADS_USE_CONNECTION,
@@ -92,6 +95,7 @@ public class Session {
 
     // Need server supported, v1.0 nebula-graph doesn't supported
     public boolean ping() {
+        checkRelease();
         if (connection == null) {
             return false;
         }
@@ -109,6 +113,7 @@ public class Session {
             log.warn("Return object to pool failed.");
         }
         connection = null;
+        isRelease.set(true);
     }
 
     public HostAddress getGraphHost() {
@@ -116,5 +121,11 @@ public class Session {
             return null;
         }
         return connection.getServerAddress();
+    }
+
+    private void checkRelease() throws InvalidSessionException {
+        if (isRelease.get()) {
+            throw new InvalidSessionException();
+        }
     }
 }
